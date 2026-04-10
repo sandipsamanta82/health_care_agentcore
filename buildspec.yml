@@ -1,0 +1,38 @@
+version: 0.2
+
+env:
+  variables:
+    AWS_ACCOUNT_ID: 216989103085
+    AWS_REGION: us-east-1
+    ECR_REPO: health-care/agent-core
+    IMAGE_TAG: latest
+
+phases:
+  pre_build:
+    commands:
+      - echo Log in to Amazon ECR...
+      #- aws --version
+
+      - ECR_URL=$AWS_ACCOUNT_ID.dkr.ecr.$AWS_REGION.amazonaws.com
+      - REPOSITORY_URI=$ECR_URL/$ECR_REPO
+
+      - aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_URL
+  build:
+    commands:
+      - echo Build started on $(date)
+      #- echo Building the Docker image.
+      #- echo Listing files in the current directory:
+      #- ls -F
+      #- echo "Checking if Dockerfile exists:"
+      #- test -f Dockerfile && echo "Dockerfile found" || echo "Dockerfile not found"      
+      - docker build -t $ECR_REPO -f Dockerfile .
+      - docker tag $ECR_REPO:$IMAGE_TAG $REPOSITORY_URI:$IMAGE_TAG
+  post_build:
+    commands:
+      - echo Pushing Docker image to ECR...
+      - docker push $REPOSITORY_URI:$IMAGE_TAG
+      
+      - echo write definitions file...
+      - printf '[{"name":"health-care-agent-core","imageUri":"%s"}]' $REPOSITORY_URI:$IMAGE_TAG > image.json
+artifacts:
+  files: image.json

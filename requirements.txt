@@ -1,0 +1,22 @@
+fastapi
+uvicorn[standard]
+pydantic
+pydantic-settings
+python-dotenv
+
+# AWS Bedrock
+langchain-aws
+boto3
+
+# LangChain core
+langchain-core
+langgraph
+
+# MCP
+langchain-mcp-adapters
+
+# HTTP client (fallback)
+httpx
+bedrock-agentcore
+langgraph-checkpoint-aws
+
