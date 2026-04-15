@@ -11,7 +11,7 @@ from typing import Annotated, TypedDict
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import BaseMessage, HumanMessage, ToolMessage
 from langgraph.prebuilt import ToolNode
 
 
@@ -59,14 +59,6 @@ def call_model(state: AgentState):
     return {"messages": [response]}
 
 
-# Conditional edge: If the model calls a tool, go to 'tools', otherwise end
-def should_continue(state: AgentState):
-    last_message = state["messages"][-1]
-    if last_message.tool_calls:
-        return "tools"
-    return END
-
-
 # Check if send_payment is being called (for interruption)
 def check_sensitive_tool(state: AgentState):
     last_message = state["messages"][-1]
@@ -76,6 +68,19 @@ def check_sensitive_tool(state: AgentState):
                 return "approve_payment"
         return "tools"
     return END
+
+
+# After tools execute, check if we should continue or end
+def should_continue_after_tools(state: AgentState):
+    # Check if the last message is a tool message
+    last_message = state["messages"][-1]
+    if isinstance(last_message, ToolMessage):
+        # Check if it's a rejection message
+        if "rejected" in last_message.content.lower() or "canceled" in last_message.content.lower():
+            return "agent"  # Let agent respond to rejection
+        else:
+            return END  # Payment successful, end the flow
+    return "agent"
 
 
 # Add a human approval node that just passes through
@@ -94,14 +99,11 @@ workflow.add_node("approve_payment", human_approval_node)
 workflow.add_edge(START, "agent")
 workflow.add_conditional_edges("agent", check_sensitive_tool)
 workflow.add_edge("approve_payment", "tools")
-workflow.add_edge("tools", "agent")
+workflow.add_conditional_edges("tools", should_continue_after_tools)
 
 
 # 4. Integrate AgentCore Memory
 memory = MemorySaver()
-#MEMORY_ID = "memory_health_care-X4a6sqEP1E"
-#checkpointer_aws = AgentCoreMemorySaver(MEMORY_ID, region_name="us-east-1")
-#graph = workflow.compile(checkpointer=checkpointer_aws)
 graph = workflow.compile(checkpointer=memory, interrupt_before=["approve_payment"])
 
 
@@ -143,20 +145,27 @@ def run_with_approval():
     
     if decision == "approve":
         print("\n✅ Human approved the payment. Proceeding...")
-        # Continue execution from the breakpoint
-        for event in graph.stream(None, config):
-            print(event)
+        # Continue execution from the breakpoint - let it run to completion
+        for event in graph.stream(None, config, stream_mode="values"):
+            if "messages" in event:
+                last_msg = event["messages"][-1]
+                if hasattr(last_msg, 'content') and isinstance(last_msg.content, str):
+                    print(f"Message: {last_msg.content[:100]}...")
         print("\n✅ Payment completed successfully!")
         
     elif decision == "reject":
         print("\n❌ Human rejected the payment. Canceling...")
-        # Update the graph state to cancel the tool call
-        last_message.tool_calls = []
-        graph.update_state(config, {"messages": [HumanMessage(content="Payment was rejected by human approval.")]})
-        # Continue to get agent's response
-        for event in graph.stream(None, config):
-            print(event)
-        print("\n❌ Payment canceled.")
+        # Create a tool result message indicating rejection
+        tool_result = ToolMessage(
+            content="Payment rejected by human approval. The user did not authorize this transaction.",
+            tool_call_id=tool_call['id']
+        )
+        # Update state and mark as completed to avoid going back to agent
+        graph.update_state(config, {"messages": [tool_result]}, as_node="tools")
+        
+        # Get the current state to show the rejection
+        final_state = graph.get_state(config)
+        print(f"\n❌ Payment canceled. Rejection recorded in conversation history.")
         
     elif decision == "edit":
         print("\n✏️  Edit payment details:")
@@ -172,42 +181,36 @@ def run_with_approval():
         
         # Update the tool call with new values
         last_message.tool_calls[0]['args'] = {'amount': amount, 'recipient': recipient}
-        graph.update_state(config, {"messages": [last_message]})
         
-        # Continue execution with modified values
-        for event in graph.stream(None, config):
-            print(event)
+        # Update the state with the modified message
+        graph.update_state(
+            config,
+            {"messages": [last_message]},
+            as_node="approve_payment"
+        )
+        
+        # Continue execution with modified values - stream to completion
+        for event in graph.stream(None, config, stream_mode="values"):
+            if "messages" in event:
+                last_msg = event["messages"][-1]
+                if hasattr(last_msg, 'content') and isinstance(last_msg.content, str):
+                    print(f"Message: {last_msg.content[:100]}...")
+        
         print("\n✅ Modified payment completed successfully!")
     
     else:
         print("\n⚠️  Invalid choice. Payment canceled by default.")
-        last_message.tool_calls = []
-        graph.update_state(config, {"messages": [HumanMessage(content="Invalid approval choice. Payment canceled.")]})
-        for event in graph.stream(None, config):
-            print(event)
+        # Create a tool result message indicating invalid choice
+        tool_result = ToolMessage(
+            content="Payment canceled due to invalid approval choice. The user did not provide a valid response.",
+            tool_call_id=tool_call['id']
+        )
+        graph.update_state(config, {"messages": [tool_result]}, as_node="tools")
+        print("\n❌ Payment canceled.")
 
 
 # Run the approval flow
 if __name__ == "__main__":
     run_with_approval()
 
-'''
-# 5. AgentCore Deployment Entrypoint
-app = BedrockAgentCoreApp()
 
-@app.entrypoint
-def handle_agent_request(payload, context):
-    user_input = payload.get("input", "")
-    config = {
-        "configurable": {
-            "thread_id": getattr(context, "session_id", "default_thread"),
-            "actor_id": getattr(context, "actor_id", "default_user")
-        }
-    }
-    
-    result = graph.invoke({"messages": [("user", user_input)]}, config=config)
-    return {"output": result["messages"][-1].content}
-
-if __name__ == "__main__":
-    app.run()
-'''
