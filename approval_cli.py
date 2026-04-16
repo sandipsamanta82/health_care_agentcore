@@ -38,7 +38,9 @@ def list_pending_approvals(manager: ApprovalManager):
 def list_all_approvals(manager: ApprovalManager, status: str = None):
     """List all approval requests with optional status filter"""
     approvals = manager.list_all_approvals(status)
+    print(approvals)
     
+    '''
     if not approvals:
         print(f"✓ No approval requests{' with status: ' + status if status else ''}")
         return
@@ -67,16 +69,18 @@ def list_all_approvals(manager: ApprovalManager, status: str = None):
         
         table_data.append([
             approval['id'],
+            approval['thread_id'],
             approval['tool_name'],
             amount_display,
             recipient_display,
-            f"{status_emoji} {approval['status']}",
+            #f"{status_emoji} {approval['status']}",
+            approval['status'],
             approval['updated_at']
         ])
     
-    headers = ["ID", "Tool", "Amount", "Recipient", "Status", "Updated At"]
+    headers = ["ID", "Thread ID", "Tool", "Amount", "Recipient", "Status", "Updated At"]
     print(tabulate(table_data, headers=headers, tablefmt="grid"))
-    print()
+    print()'''
 
 
 def show_approval_details(manager: ApprovalManager, approval_id: int):

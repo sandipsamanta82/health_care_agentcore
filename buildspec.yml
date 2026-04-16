@@ -2,7 +2,7 @@ version: 0.2
 
 env:
   variables:
-    AWS_ACCOUNT_ID: 216989103085
+    AWS_ACCOUNT_ID: 
     AWS_REGION: us-east-1
     ECR_REPO: health-care/agent-core
     IMAGE_TAG: latest

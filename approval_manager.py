@@ -13,7 +13,7 @@ class ApprovalStatus(Enum):
 class ApprovalManager:
     """Manages human approval requests in SQLite database"""
     
-    def __init__(self, db_path: str = "healthcare.db"):
+    def __init__(self, db_path: str = "agent.db"):
         self.db_path = db_path
         self._init_db()
     
@@ -60,6 +60,7 @@ class ApprovalManager:
         conn.close()
         return approval_id
     
+
     def get_pending_approvals(self, thread_id: Optional[str] = None) -> List[Dict]:
         """Get all pending approval requests, optionally filtered by thread_id"""
         conn = sqlite3.connect(self.db_path)
@@ -83,7 +84,8 @@ class ApprovalManager:
         conn.close()
         
         return [dict(row) for row in rows]
-    
+
+
     def get_approval_by_id(self, approval_id: int) -> Optional[Dict]:
         """Get a specific approval request by ID"""
         conn = sqlite3.connect(self.db_path)
@@ -96,6 +98,7 @@ class ApprovalManager:
         
         return dict(row) if row else None
     
+
     def approve_request(self, approval_id: int) -> bool:
         """Approve a pending request"""
         conn = sqlite3.connect(self.db_path)
@@ -201,6 +204,7 @@ if __name__ == "__main__":
     # Test the ApprovalManager
     manager = ApprovalManager()
     
+    '''
     # Create a test approval
     approval_id = manager.save_pending_approval(
         thread_id="test_thread_1",
@@ -208,20 +212,20 @@ if __name__ == "__main__":
         tool_call_id="test_call_123",
         args={"amount": 500, "recipient": "Alice"}
     )
-    print(f"Created approval request with ID: {approval_id}")
+    print(f"Created approval request with ID: {approval_id}")'''
     
     # List pending approvals
-    pending = manager.get_pending_approvals()
+    pending = manager.get_pending_approvals('thread_1')
     print(f"\nPending approvals: {len(pending)}")
     for approval in pending:
         print(f"  ID: {approval['id']}, Tool: {approval['tool_name']}, Args: {approval['original_args']}")
     
-    # Approve it
+    '''# Approve it
     if manager.approve_request(approval_id):
         print(f"\nApproved request {approval_id}")
     
     # Check status
     status = manager.get_approval_by_id(approval_id)
-    print(f"\nFinal status: {status['status']}")
+    print(f"\nFinal status: {status['status']}")'''
 
 

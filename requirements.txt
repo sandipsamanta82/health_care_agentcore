@@ -19,4 +19,5 @@ langchain-mcp-adapters
 httpx
 bedrock-agentcore
 langgraph-checkpoint-aws
+langgraph-checkpoint-sqlite
 
